@@ -23,11 +23,14 @@
 #include <linux/if_ether.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>
+#include <linux/clk.h>
 
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
 
 #include <mach/includes.h>
+#include <plat/sys_config.h>
+#include <mach/irqs.h>
 
 #include "sun7i_can.h"
 
@@ -208,11 +211,17 @@ static int sun7i_can_get_berr_counter(const struct net_device *dev,
 static void chipset_init(struct net_device *dev)
 {
         u32 temp_irqen;
-
+		unsigned long gpio_rx = 1;
+		unsigned long gpio_tx = 1;
+		
         /* config pins
-         * PA16-TX, PA17-RX :3 */
-        sw_gpio_setcfg(GPIOA(16), 3);
-        sw_gpio_setcfg(GPIOA(17), 3);
+         * PH20-TX, PH21-RX :4 */
+		gpio_tx = gpio_request_ex("can_para", "can_tx");
+		gpio_rx = gpio_request_ex("can_para", "can_rx");
+		
+		if(gpio_tx | gpio_rx) {
+			printk(KERN_INFO "can request gpio fail!\n");
+        }
 
         //enable clock
         writel(readl(0xF1C20000 + 0x6C) | (1 << 4), 0xF1C20000 + 0x6C);
@@ -629,14 +638,23 @@ EXPORT_SYMBOL_GPL(unregister_sun7icandev);
 static __init int sun7i_can_init(void)
 {
         struct sun7i_can_priv *priv;
-        int err;
-
+        int err = 0;
+		int ret = 0;
+		int used = 0;
+		
         sun7ican_dev = alloc_sun7icandev(0);
         if(!sun7ican_dev) {
                 printk(KERN_INFO "alloc sun7icandev fail\n");
         }
+	
+		ret = script_parser_fetch("can_para", "can_used", &used, sizeof (used));
+		if ( ret || used == 0) {
+			printk(KERN_INFO "[sun7i-can] Cannot setup CANBus driver, maybe not configured in script.bin?");
+			goto exit_free;
+		}
+		
         priv = netdev_priv(sun7ican_dev);
-        sun7ican_dev->irq = AW_IRQ_CAN;
+        sun7ican_dev->irq = SW_INT_IRQNO_CAN;
         priv->irq_flags = 0;
         priv->can.clock.freq = clk_get_rate(clk_get(NULL, CLK_MOD_CAN));
         chipset_init(sun7ican_dev);
