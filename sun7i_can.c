@@ -211,15 +211,11 @@ static int sun7i_can_get_berr_counter(const struct net_device *dev,
 static void chipset_init(struct net_device *dev)
 {
         u32 temp_irqen;
-		unsigned long gpio_rx = 1;
-		unsigned long gpio_tx = 1;
 		
         /* config pins
          * PH20-TX, PH21-RX :4 */
-		gpio_tx = gpio_request_ex("can_para", "can_tx");
-		gpio_rx = gpio_request_ex("can_para", "can_rx");
-		
-		if(gpio_tx | gpio_rx) {
+
+		if (gpio_request_ex("can_para", "can_tx") == 0 || gpio_request_ex("can_para", "can_rx") == 0 ) {
 			printk(KERN_INFO "can request gpio fail!\n");
         }
 
