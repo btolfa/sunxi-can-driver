@@ -114,12 +114,22 @@ static void set_normal_mode(struct net_device *dev)
         for (i = 0; i < 100; i++) {
                 /* check reset bit */
                 if ((status & RESET_MODE) == 0) {
-                        priv->can.state = CAN_STATE_ERROR_ACTIVE;
-                        /* enable interrupts */
-                        if (priv->can.ctrlmode & CAN_CTRLMODE_BERR_REPORTING)
-                                writel(0xFFFF, CAN_INTEN_ADDR);
-                        else
-                                writel(0xFFFF & ~BERR_IRQ_EN, CAN_INTEN_ADDR);
+                        priv->can.state = CAN_STATE_ERROR_ACTIVE;												
+						
+						/* enable interrupts */
+                        if (priv->can.ctrlmode & CAN_CTRLMODE_BERR_REPORTING) {
+								writel(0xFFFF, CAN_INTEN_ADDR);
+						} else {
+								writel(0xFFFF & ~BERR_IRQ_EN, CAN_INTEN_ADDR);
+						}
+											
+						if (priv->can.ctrlmode & CAN_CTRLMODE_LOOPBACK) {
+							/* Put device into loopback mode */
+							writel(readl(CAN_MSEL_ADDR) | LOOPBACK_MODE, CAN_MSEL_ADDR);
+						} else if (priv->can.ctrlmode & CAN_CTRLMODE_LISTENONLY) {
+							/* Put device into listen-only mode */
+							writel(readl(CAN_MSEL_ADDR) | LISTEN_ONLY_MODE, CAN_MSEL_ADDR);
+						}
                         return;
                 }
 
@@ -584,7 +594,7 @@ struct net_device *alloc_sun7icandev(int sizeof_priv)
         priv->can.do_set_bittiming = sun7i_can_set_bittiming;
         priv->can.do_set_mode = sun7i_can_set_mode;
         priv->can.do_get_berr_counter = sun7i_can_get_berr_counter;
-        priv->can.ctrlmode_supported = CAN_CTRLMODE_ONE_SHOT |
+        priv->can.ctrlmode_supported = CAN_CTRLMODE_LOOPBACK |
                 CAN_CTRLMODE_LISTENONLY |
                 CAN_CTRLMODE_3_SAMPLES |
                 CAN_CTRLMODE_BERR_REPORTING;
