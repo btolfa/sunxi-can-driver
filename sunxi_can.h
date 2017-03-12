@@ -8,13 +8,13 @@
 *
 */
 
-#ifndef SUN7I_CAN_H
-#define SUN7I_CAN_H
+#ifndef SUNXI_CAN_H
+#define SUNXI_CAN_H
 
 #include <linux/irqreturn.h>
 #include <linux/can/dev.h>
 
-#define SUN7I_CAN_ECHO_SKB_MAX        1 /* the SUN7I CAN has one TX buffer object */
+#define SUNXI_CAN_ECHO_SKB_MAX        1 /* the SUN7I, SUN4I CAN has one TX buffer object */
 
 /* Registers' address */
 #define CAN_BASE0                        0xF1C2BC00
@@ -154,14 +154,14 @@
 /*
 * Flags for sun7icanpriv.flags
 */
-#define SUN7I_CAN_CUSTOM_IRQ_HANDLER 0x1
+#define SUNXI_CAN_CUSTOM_IRQ_HANDLER 0x1
 
-#define SUN7I_CAN_MAX_IRQ 20        /* max. number of interrupts handled in ISR */
+#define SUNXI_CAN_MAX_IRQ 20        /* max. number of interrupts handled in ISR */
 
 /*
 * sun7i_can private data structure
 */
-struct sun7i_can_priv {
+struct sunxi_can_priv {
         struct can_priv can;        /* must be the first member */
         int open_time;
         struct sk_buff *echo_skb;
