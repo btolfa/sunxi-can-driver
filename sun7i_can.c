@@ -28,7 +28,6 @@
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
 
-#include <mach/includes.h>
 #include <plat/sys_config.h>
 #include <mach/irqs.h>
 
@@ -662,7 +661,7 @@ static __init int sun7i_can_init(void)
         priv = netdev_priv(sun7ican_dev);
         sun7ican_dev->irq = SW_INT_IRQNO_CAN;
         priv->irq_flags = 0;
-        priv->can.clock.freq = clk_get_rate(clk_get(NULL, CLK_MOD_CAN));
+        priv->can.clock.freq = clk_get_rate(clk_get(NULL, "can"));
         chipset_init(sun7ican_dev);
         err = register_sun7icandev(sun7ican_dev);
         if(err) {
