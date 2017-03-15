@@ -478,12 +478,6 @@ irqreturn_t sunxi_can_interrupt(int irq, void *dev_id)
         uint8_t isrc, status;
         int n = 0;
 
-        pr_debug("sunxican: capture a interrupt\n");
-
-        /* Shared interrupts and IRQ off? */
-        if ((readl(CAN_INT_ADDR) & 0xF) == 0x0)
-                return IRQ_NONE;
-
         while ((isrc = readl(CAN_INT_ADDR)) && (n < SUNXI_CAN_MAX_IRQ)) {
                 n++;
                 status = readl(CAN_STA_ADDR);
@@ -495,6 +489,7 @@ irqreturn_t sunxi_can_interrupt(int irq, void *dev_id)
                         netdev_warn(dev, "wakeup interrupt\n");
 
                 if (isrc & TBUF_VLD) {
+			pr_debug("sunxicanirq: Tx irq, reg=0x%X\n", isrc);
                         /* transmission complete interrupt */
                         stats->tx_bytes += readl(CAN_RBUF_RBACK_START_ADDR) & 0xf;
                         stats->tx_packets++;
@@ -502,6 +497,7 @@ irqreturn_t sunxi_can_interrupt(int irq, void *dev_id)
                         netif_wake_queue(dev);
                 }
                 if (isrc & RBUF_VLD) {
+			pr_debug("sunxicanirq: Rx irq, reg=0x%X\n", isrc);
                         /* receive interrupt */
                         while (status & RBUF_RDY) {        //RX buffer is not empty
                                 sunxi_can_rx(dev);
@@ -512,6 +508,7 @@ irqreturn_t sunxi_can_interrupt(int irq, void *dev_id)
                         }
                 }
                 if (isrc & (DATA_ORUNI | ERR_WRN | BUS_ERR | ERR_PASSIVE | ARB_LOST)) {
+			pr_debug("sunxicanirq: error, reg=0x%X\n", isrc);
                         /* error interrupt */
                         if (sunxi_can_err(dev, isrc, status))
                                 break;
@@ -519,7 +516,7 @@ irqreturn_t sunxi_can_interrupt(int irq, void *dev_id)
 
                 //clear the interrupt
                 writel(isrc, CAN_INT_ADDR);
-                udelay(10);
+                readl(CAN_INT_ADDR);
         }
 
         if (n >= SUNXI_CAN_MAX_IRQ)
@@ -536,6 +533,8 @@ static int sunxi_can_open(struct net_device *dev)
 
         /* set chip into reset mode */
         set_reset_mode(dev);
+
+        writel(0xffffffff, CAN_ACPM_ADDR);
 
         /* common open */
         err = open_candev(dev);
