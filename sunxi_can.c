@@ -1,7 +1,10 @@
 /*
-* sun7i_can.c - CAN bus controller driver for sun7i
+* sunxi_can.c - CAN bus controller driver for sun7i and sun4i
 *
 * Copyright (c) 2013 Peter Chen
+*  - driver for sun7i
+* Copyright (c) 2017 Oleg Strelkov <o.strelkov@gmail.com>
+*  - modifications for sun4i
 *
 * Copyright (c) 2013 Inmotion Co,. LTD
 * All right reserved.
@@ -28,20 +31,19 @@
 #include <linux/can/dev.h>
 #include <linux/can/error.h>
 
-#include <mach/includes.h>
 #include <plat/sys_config.h>
 #include <mach/irqs.h>
 
-#include "sun7i_can.h"
+#include "sunxi_can.h"
 
-#define DRV_NAME "sun7i_can"
+#define DRV_NAME "sunxi_can"
 
 MODULE_AUTHOR("Peter Chen <xingkongcp@gmail.com>");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_DESCRIPTION(DRV_NAME "CAN netdevice driver");
 
-static struct net_device *sun7ican_dev;
-static struct can_bittiming_const sun7i_can_bittiming_const = {
+static struct net_device *sunxican_dev;
+static struct can_bittiming_const sunxi_can_bittiming_const = {
         .name = DRV_NAME,
         .tseg1_min = 1,
         .tseg1_max = 16,
@@ -53,7 +55,7 @@ static struct can_bittiming_const sun7i_can_bittiming_const = {
         .brp_inc = 1,
 };
 
-static void sun7i_can_write_cmdreg(struct sun7i_can_priv *priv, u8 val)
+static void sunxi_can_write_cmdreg(struct sunxi_can_priv *priv, u8 val)
 {
         unsigned long flags;
 
@@ -66,16 +68,16 @@ static void sun7i_can_write_cmdreg(struct sun7i_can_priv *priv, u8 val)
         spin_unlock_irqrestore(&priv->cmdreg_lock, flags);
 }
 
-static int sun7i_can_is_absent(struct sun7i_can_priv *priv)
+static int sunxi_can_is_absent(struct sunxi_can_priv *priv)
 {
         return ((readl(CAN_MSEL_ADDR) & 0xFF) == 0xFF);
 }
 
-static int sun7i_can_probe(struct net_device *dev)
+static int sunxi_can_probe(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
 
-        if (sun7i_can_is_absent(priv)) {
+        if (sunxi_can_is_absent(priv)) {
                 printk(KERN_INFO "%s: probing @0x%lX failed\n",
                  DRV_NAME, dev->base_addr);
                 return 0;
@@ -85,7 +87,7 @@ static int sun7i_can_probe(struct net_device *dev)
 
 static void set_reset_mode(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         uint32_t status = readl(CAN_MSEL_ADDR);
         int i;
 
@@ -102,12 +104,12 @@ static void set_reset_mode(struct net_device *dev)
                 status = readl(CAN_MSEL_ADDR);
         }
 
-        netdev_err(dev, "setting SUN7I_CAN into reset mode failed!\n");
+        netdev_err(dev, "setting SUNXI_CAN into reset mode failed!\n");
 }
 
 static void set_normal_mode(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         unsigned char status = readl(CAN_MSEL_ADDR);
         int i;
 
@@ -139,13 +141,13 @@ static void set_normal_mode(struct net_device *dev)
                 status = readl(CAN_MSEL_ADDR);
         }
 
-        netdev_err(dev, "setting SUN7I_CAN into normal mode failed!\n");
+        netdev_err(dev, "setting SUNXI_CAN into normal mode failed!\n");
 }
 
 
-static void sun7i_can_start(struct net_device *dev)
+static void sunxi_can_start(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
 
         /* leave reset mode */
         if (priv->can.state != CAN_STATE_STOPPED)
@@ -158,16 +160,16 @@ static void sun7i_can_start(struct net_device *dev)
         set_normal_mode(dev);
 }
 
-static int sun7i_can_set_mode(struct net_device *dev, enum can_mode mode)
+static int sunxi_can_set_mode(struct net_device *dev, enum can_mode mode)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
 
         if (!priv->open_time)
                 return -EINVAL;
 
         switch (mode) {
         case CAN_MODE_START:
-                sun7i_can_start(dev);
+                sunxi_can_start(dev);
                 if (netif_queue_stopped(dev))
                         netif_wake_queue(dev);
                 break;
@@ -179,9 +181,9 @@ static int sun7i_can_set_mode(struct net_device *dev, enum can_mode mode)
         return 0;
 }
 
-static int sun7i_can_set_bittiming(struct net_device *dev)
+static int sunxi_can_set_bittiming(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         struct can_bittiming *bt = &priv->can.bittiming;
         u32 cfg;
 
@@ -201,7 +203,7 @@ static int sun7i_can_set_bittiming(struct net_device *dev)
         return 0;
 }
 
-static int sun7i_can_get_berr_counter(const struct net_device *dev,
+static int sunxi_can_get_berr_counter(const struct net_device *dev,
                                  struct can_berr_counter *bec)
 {
         bec->txerr = readl(CAN_ERRC_ADDR) & 0x000F;
@@ -211,7 +213,7 @@ static int sun7i_can_get_berr_counter(const struct net_device *dev,
 }
 
 /*
-* initialize sun7i_can:
+* initialize sunxi_can:
 * - reset chip
 * - set output mode
 * - set baudrate
@@ -226,7 +228,7 @@ static void chipset_init(struct net_device *dev)
          * PH20-TX, PH21-RX :4 */
 
 		if (gpio_request_ex("can_para", "can_tx") == 0 || gpio_request_ex("can_para", "can_rx") == 0 ) {
-			printk(KERN_INFO "can request gpio fail!\n");
+			pr_info("can request gpio fail!\n");
         }
 
         //enable clock
@@ -250,10 +252,10 @@ static void chipset_init(struct net_device *dev)
 * xx xx xx xx         ff         ll 00 11 22 33 44 55 66 77
 * [ can_id ] [flags] [len] [can data (up to 8 bytes]
 */
-static netdev_tx_t sun7i_can_start_xmit(struct sk_buff *skb,
+static netdev_tx_t sunxi_can_start_xmit(struct sk_buff *skb,
                                          struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         struct can_frame *cf = (struct can_frame *)skb->data;
         uint8_t dlc;
         canid_t id;
@@ -301,14 +303,14 @@ static netdev_tx_t sun7i_can_start_xmit(struct sk_buff *skb,
         can_put_echo_skb(skb, dev, 0);
 
         while (!(readl(CAN_STA_ADDR) & TBUF_RDY));
-        sun7i_can_write_cmdreg(priv, TRANS_REQ);
+        sunxi_can_write_cmdreg(priv, TRANS_REQ);
 
         return NETDEV_TX_OK;
 }
 
-static void sun7i_can_rx(struct net_device *dev)
+static void sunxi_can_rx(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         struct net_device_stats *stats = &dev->stats;
         struct can_frame *cf;
         struct sk_buff *skb;
@@ -353,7 +355,7 @@ static void sun7i_can_rx(struct net_device *dev)
         cf->can_id = id;
 
         /* release receive buffer */
-        sun7i_can_write_cmdreg(priv, RELEASE_RBUF);
+        sunxi_can_write_cmdreg(priv, RELEASE_RBUF);
 
         netif_rx(skb);
 
@@ -361,9 +363,9 @@ static void sun7i_can_rx(struct net_device *dev)
         stats->rx_bytes += cf->can_dlc;
 }
 
-static int sun7i_can_err(struct net_device *dev, uint8_t isrc, uint8_t status)
+static int sunxi_can_err(struct net_device *dev, uint8_t isrc, uint8_t status)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         struct net_device_stats *stats = &dev->stats;
         struct can_frame *cf;
         struct sk_buff *skb;
@@ -381,7 +383,7 @@ static int sun7i_can_err(struct net_device *dev, uint8_t isrc, uint8_t status)
                 cf->data[1] = CAN_ERR_CRTL_RX_OVERFLOW;
                 stats->rx_over_errors++;
                 stats->rx_errors++;
-                sun7i_can_write_cmdreg(priv, CLEAR_DOVERRUN);        /* clear bit */
+                sunxi_can_write_cmdreg(priv, CLEAR_DOVERRUN);        /* clear bit */
         }
 
         if (isrc & ERR_WRN) {
@@ -468,31 +470,26 @@ static int sun7i_can_err(struct net_device *dev, uint8_t isrc, uint8_t status)
         return 0;
 }
 
-irqreturn_t sun7i_can_interrupt(int irq, void *dev_id)
+irqreturn_t sunxi_can_interrupt(int irq, void *dev_id)
 {
         struct net_device *dev = (struct net_device *)dev_id;
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         struct net_device_stats *stats = &dev->stats;
         uint8_t isrc, status;
         int n = 0;
 
-        printk(KERN_INFO "sun7ican: capture a interrupt\n");
-
-        /* Shared interrupts and IRQ off? */
-        if ((readl(CAN_INT_ADDR) & 0xF) == 0x0)
-                return IRQ_NONE;
-
-        while ((isrc = readl(CAN_INT_ADDR)) && (n < SUN7I_CAN_MAX_IRQ)) {
+        while ((isrc = readl(CAN_INT_ADDR)) && (n < SUNXI_CAN_MAX_IRQ)) {
                 n++;
                 status = readl(CAN_STA_ADDR);
                 /* check for absent controller due to hw unplug */
-                if (sun7i_can_is_absent(priv))
+                if (sunxi_can_is_absent(priv))
                         return IRQ_NONE;
 
                 if (isrc & WAKEUP)
                         netdev_warn(dev, "wakeup interrupt\n");
 
                 if (isrc & TBUF_VLD) {
+			pr_debug("sunxicanirq: Tx irq, reg=0x%X\n", isrc);
                         /* transmission complete interrupt */
                         stats->tx_bytes += readl(CAN_RBUF_RBACK_START_ADDR) & 0xf;
                         stats->tx_packets++;
@@ -500,40 +497,44 @@ irqreturn_t sun7i_can_interrupt(int irq, void *dev_id)
                         netif_wake_queue(dev);
                 }
                 if (isrc & RBUF_VLD) {
+			pr_debug("sunxicanirq: Rx irq, reg=0x%X\n", isrc);
                         /* receive interrupt */
                         while (status & RBUF_RDY) {        //RX buffer is not empty
-                                sun7i_can_rx(dev);
+                                sunxi_can_rx(dev);
                                 status = readl(CAN_STA_ADDR);
                                 /* check for absent controller */
-                                if (sun7i_can_is_absent(priv))
+                                if (sunxi_can_is_absent(priv))
                                         return IRQ_NONE;
                         }
                 }
                 if (isrc & (DATA_ORUNI | ERR_WRN | BUS_ERR | ERR_PASSIVE | ARB_LOST)) {
+			pr_debug("sunxicanirq: error, reg=0x%X\n", isrc);
                         /* error interrupt */
-                        if (sun7i_can_err(dev, isrc, status))
+                        if (sunxi_can_err(dev, isrc, status))
                                 break;
                 }
 
                 //clear the interrupt
                 writel(isrc, CAN_INT_ADDR);
-                udelay(10);
+                readl(CAN_INT_ADDR);
         }
 
-        if (n >= SUN7I_CAN_MAX_IRQ)
+        if (n >= SUNXI_CAN_MAX_IRQ)
                 netdev_dbg(dev, "%d messages handled in ISR", n);
 
         return (n) ? IRQ_HANDLED : IRQ_NONE;
 }
-EXPORT_SYMBOL_GPL(sun7i_can_interrupt);
+EXPORT_SYMBOL_GPL(sunxi_can_interrupt);
 
-static int sun7i_can_open(struct net_device *dev)
+static int sunxi_can_open(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
         int err;
 
         /* set chip into reset mode */
         set_reset_mode(dev);
+
+        writel(0xffffffff, CAN_ACPM_ADDR);
 
         /* common open */
         err = open_candev(dev);
@@ -541,18 +542,18 @@ static int sun7i_can_open(struct net_device *dev)
                 return err;
 
         /* register interrupt handler, if not done by the device driver */
-        if (!(priv->flags & SUN7I_CAN_CUSTOM_IRQ_HANDLER)) {
-                err = request_irq(dev->irq, sun7i_can_interrupt, priv->irq_flags,
+        if (!(priv->flags & SUNXI_CAN_CUSTOM_IRQ_HANDLER)) {
+                err = request_irq(dev->irq, sunxi_can_interrupt, priv->irq_flags,
                                  dev->name, (void *)dev);
                 if (err) {
                         close_candev(dev);
-                        printk(KERN_INFO "request_irq err:%d\n", err);
+                        pr_info("request_irq err:%d\n", err);
                         return -EAGAIN;
                 }
         }
 
         /* init and start chi */
-        sun7i_can_start(dev);
+        sunxi_can_start(dev);
         priv->open_time = jiffies;
 
         netif_start_queue(dev);
@@ -560,14 +561,14 @@ static int sun7i_can_open(struct net_device *dev)
         return 0;
 }
 
-static int sun7i_can_close(struct net_device *dev)
+static int sunxi_can_close(struct net_device *dev)
 {
-        struct sun7i_can_priv *priv = netdev_priv(dev);
+        struct sunxi_can_priv *priv = netdev_priv(dev);
 
         netif_stop_queue(dev);
         set_reset_mode(dev);
 
-        if (!(priv->flags & SUN7I_CAN_CUSTOM_IRQ_HANDLER))
+        if (!(priv->flags & SUNXI_CAN_CUSTOM_IRQ_HANDLER))
                 free_irq(dev->irq, (void *)dev);
 
         close_candev(dev);
@@ -577,23 +578,23 @@ static int sun7i_can_close(struct net_device *dev)
         return 0;
 }
 
-struct net_device *alloc_sun7icandev(int sizeof_priv)
+struct net_device *alloc_sunxicandev(int sizeof_priv)
 {
         struct net_device *dev;
-        struct sun7i_can_priv *priv;
+        struct sunxi_can_priv *priv;
 
-        dev = alloc_candev(sizeof(struct sun7i_can_priv) + sizeof_priv,
-                SUN7I_CAN_ECHO_SKB_MAX);
+        dev = alloc_candev(sizeof(struct sunxi_can_priv) + sizeof_priv,
+                SUNXI_CAN_ECHO_SKB_MAX);
         if (!dev)
                 return NULL;
 
         priv = netdev_priv(dev);
 
         priv->dev = dev;
-        priv->can.bittiming_const = &sun7i_can_bittiming_const;
-        priv->can.do_set_bittiming = sun7i_can_set_bittiming;
-        priv->can.do_set_mode = sun7i_can_set_mode;
-        priv->can.do_get_berr_counter = sun7i_can_get_berr_counter;
+        priv->can.bittiming_const = &sunxi_can_bittiming_const;
+        priv->can.do_set_bittiming = sunxi_can_set_bittiming;
+        priv->can.do_set_mode = sunxi_can_set_mode;
+        priv->can.do_get_berr_counter = sunxi_can_get_berr_counter;
         priv->can.ctrlmode_supported = CAN_CTRLMODE_LOOPBACK |
                 CAN_CTRLMODE_LISTENONLY |
                 CAN_CTRLMODE_3_SAMPLES |
@@ -602,93 +603,93 @@ struct net_device *alloc_sun7icandev(int sizeof_priv)
         spin_lock_init(&priv->cmdreg_lock);
 
         if (sizeof_priv)
-                priv->priv = (void *)priv + sizeof(struct sun7i_can_priv);
+                priv->priv = (void *)priv + sizeof(struct sunxi_can_priv);
 
         return dev;
 }
-EXPORT_SYMBOL_GPL(alloc_sun7icandev);
+EXPORT_SYMBOL_GPL(alloc_sunxicandev);
 
-void free_sun7icandev(struct net_device *dev)
+void free_sunxicandev(struct net_device *dev)
 {
         free_candev(dev);
 }
-EXPORT_SYMBOL_GPL(free_sun7icandev);
+EXPORT_SYMBOL_GPL(free_sunxicandev);
 
-static const struct net_device_ops sun7ican_netdev_ops = {
-       .ndo_open = sun7i_can_open,
-       .ndo_stop = sun7i_can_close,
-       .ndo_start_xmit = sun7i_can_start_xmit,
+static const struct net_device_ops sunxican_netdev_ops = {
+       .ndo_open = sunxi_can_open,
+       .ndo_stop = sunxi_can_close,
+       .ndo_start_xmit = sunxi_can_start_xmit,
 };
 
-int register_sun7icandev(struct net_device *dev)
+int register_sunxicandev(struct net_device *dev)
 {
-        if (!sun7i_can_probe(dev))
+        if (!sunxi_can_probe(dev))
                 return -ENODEV;
 
         dev->flags |= IFF_ECHO;        /* support local echo */
-        dev->netdev_ops = &sun7ican_netdev_ops;
+        dev->netdev_ops = &sunxican_netdev_ops;
 
         set_reset_mode(dev);
         
         return register_candev(dev);
 }
-EXPORT_SYMBOL_GPL(register_sun7icandev);
+EXPORT_SYMBOL_GPL(register_sunxicandev);
 
-void unregister_sun7icandev(struct net_device *dev)
+void unregister_sunxicandev(struct net_device *dev)
 {
         set_reset_mode(dev);
         unregister_candev(dev);
 }
-EXPORT_SYMBOL_GPL(unregister_sun7icandev);
+EXPORT_SYMBOL_GPL(unregister_sunxicandev);
 
-static __init int sun7i_can_init(void)
+static __init int sunxi_can_init(void)
 {
-        struct sun7i_can_priv *priv;
+        struct sunxi_can_priv *priv;
         int err = 0;
 		int ret = 0;
 		int used = 0;
 		
-        sun7ican_dev = alloc_sun7icandev(0);
-        if(!sun7ican_dev) {
-                printk(KERN_INFO "alloc sun7icandev fail\n");
+        sunxican_dev = alloc_sunxicandev(0);
+        if(!sunxican_dev) {
+                pr_info("alloc sunxicandev fail\n");
         }
 	
 		ret = script_parser_fetch("can_para", "can_used", &used, sizeof (used));
 		if ( ret || used == 0) {
-			printk(KERN_INFO "[sun7i-can] Cannot setup CANBus driver, maybe not configured in script.bin?");
+			pr_info("[sunxi-can] Cannot setup CANBus driver, maybe not configured in script.bin?");
 			goto exit_free;
 		}
 		
-        priv = netdev_priv(sun7ican_dev);
-        sun7ican_dev->irq = SW_INT_IRQNO_CAN;
+        priv = netdev_priv(sunxican_dev);
+        sunxican_dev->irq = SW_INT_IRQNO_CAN;
         priv->irq_flags = 0;
-        priv->can.clock.freq = clk_get_rate(clk_get(NULL, CLK_MOD_CAN));
-        chipset_init(sun7ican_dev);
-        err = register_sun7icandev(sun7ican_dev);
+        priv->can.clock.freq = clk_get_rate(clk_get(NULL, "can"));
+        chipset_init(sunxican_dev);
+        err = register_sunxicandev(sunxican_dev);
         if(err) {
-                dev_err(&sun7ican_dev->dev, "registering %s failed (err=%d)\n", DRV_NAME, err);
+                dev_err(&sunxican_dev->dev, "registering %s failed (err=%d)\n", DRV_NAME, err);
                 goto exit_free;
         }
 
-        dev_info(&sun7ican_dev->dev, "%s device registered (reg_base=0x%08x, irq=%d)\n",
-                 DRV_NAME, CAN_BASE0, sun7ican_dev->irq);
+        dev_info(&sunxican_dev->dev, "%s device registered (reg_base=0x%08x, irq=%d)\n",
+                 DRV_NAME, CAN_BASE0, sunxican_dev->irq);
 
-        printk(KERN_INFO "%s CAN netdevice driver\n", DRV_NAME);
+        pr_info("%s CAN netdevice driver\n", DRV_NAME);
 
         return 0;
 
 exit_free:
-        free_sun7icandev(sun7ican_dev);
+        free_sunxicandev(sunxican_dev);
 
         return err;
 }
-module_init(sun7i_can_init);
+module_init(sunxi_can_init);
 
-static __exit void sun7i_can_exit(void)
+static __exit void sunxi_can_exit(void)
 {
-        unregister_sun7icandev(sun7ican_dev);
-        free_sun7icandev(sun7ican_dev);
+        unregister_sunxicandev(sunxican_dev);
+        free_sunxicandev(sunxican_dev);
 
-        printk(KERN_INFO "%s: driver removed\n", DRV_NAME);
+        pr_info("%s: driver removed\n", DRV_NAME);
 }
-module_exit(sun7i_can_exit);
+module_exit(sunxi_can_exit);

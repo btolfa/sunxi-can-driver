@@ -1,5 +1,6 @@
-config CAN_SUN7I
-        tristate "Sun7i CAN bus controller"
-        default n
-        help
-        This is the Sun7i CAN BUS driver for android system by peter chen.
+config CAN_SUNXI
+	tristate "Sun7i, Sun4i CAN bus controller"
+	depends on ARCH_SUN4I || ARCH_SUN7I
+	default n
+	help
+	This is the Sun7i, Sun4i Allwinner CAN BUS driver.
